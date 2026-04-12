@@ -238,8 +238,9 @@ const PASSTHROUGH_FORMAT: FormatAdapter = {
 function checkAuth(
   c: Context,
   accountPool: AccountPool,
+  allowUnauthenticated: boolean = false,
 ): Response | null {
-  if (!accountPool.isAuthenticated()) {
+  if (!allowUnauthenticated && !accountPool.isAuthenticated()) {
     c.status(401);
     return c.json({
       type: "error",
@@ -465,9 +466,6 @@ export function createResponsesRoutes(
   // ── POST /v1/responses — streaming SSE passthrough ──
 
   const responsesHandler = async (c: Context) => {
-    const authErr = checkAuth(c, accountPool);
-    if (authErr) return authErr;
-
     let rawBody: unknown;
     try {
       rawBody = await c.req.json();
@@ -486,8 +484,12 @@ export function createResponsesRoutes(
     const body = parseBody(c, rawBody);
     if (body instanceof Response) return body;
 
-    const config = getConfig();
     const rawModel = typeof body.model === "string" ? body.model : "codex";
+    const allowUnauthenticated = !!(upstreamRouter && !upstreamRouter.isCodexModel(rawModel));
+    const authErr = checkAuth(c, accountPool, allowUnauthenticated);
+    if (authErr) return authErr;
+
+    const config = getConfig();
     const parsed = parseModelName(rawModel);
     const modelId = resolveModelId(parsed.modelId);
     const displayModel = buildDisplayModelName(parsed);
@@ -586,9 +588,6 @@ export function createResponsesRoutes(
   // ── POST /v1/responses/compact — non-streaming JSON proxy ──
 
   const compactHandler = async (c: Context) => {
-    const authErr = checkAuth(c, accountPool);
-    if (authErr) return authErr;
-
     let rawBody: unknown;
     try {
       rawBody = await c.req.json();
@@ -606,6 +605,11 @@ export function createResponsesRoutes(
 
     const body = parseBody(c, rawBody);
     if (body instanceof Response) return body;
+
+    const rawModel = typeof body.model === "string" ? body.model : "codex";
+    const allowUnauthenticated = !!(upstreamRouter && !upstreamRouter.isCodexModel(rawModel));
+    const authErr = checkAuth(c, accountPool, allowUnauthenticated);
+    if (authErr) return authErr;
 
     return handleCompact(c, accountPool, cookieJar, proxyPool, body, upstreamRouter);
   };

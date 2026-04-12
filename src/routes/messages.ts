@@ -58,8 +58,29 @@ export function createMessagesRoutes(
   const app = new Hono();
 
   app.post("/v1/messages", async (c) => {
+    // Parse request
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      c.status(400);
+      return c.json(
+        makeError("invalid_request_error", "Invalid JSON in request body"),
+      );
+    }
+    const parsed = AnthropicMessagesRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      c.status(400);
+      return c.json(
+        makeError("invalid_request_error", `Invalid request: ${parsed.error.message}`),
+      );
+    }
+    const req = parsed.data;
+
+    const allowUnauthenticated = !!(upstreamRouter && !upstreamRouter.isCodexModel(req.model));
+
     // Auth check
-    if (!accountPool.isAuthenticated()) {
+    if (!allowUnauthenticated && !accountPool.isAuthenticated()) {
       c.status(401);
       return c.json(
         makeError("authentication_error", "Not authenticated. Please login first at /"),
@@ -79,25 +100,6 @@ export function createMessagesRoutes(
         return c.json(makeError("authentication_error", "Invalid API key"));
       }
     }
-
-    // Parse request
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      c.status(400);
-      return c.json(
-        makeError("invalid_request_error", "Invalid JSON in request body"),
-      );
-    }
-    const parsed = AnthropicMessagesRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      c.status(400);
-      return c.json(
-        makeError("invalid_request_error", `Invalid request: ${parsed.error.message}`),
-      );
-    }
-    const req = parsed.data;
 
     const codexRequest = translateAnthropicToCodexRequest(req);
     const wantThinking = req.thinking?.type === "enabled" || req.thinking?.type === "adaptive";

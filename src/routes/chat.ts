@@ -62,8 +62,39 @@ export function createChatRoutes(
   const app = new Hono();
 
   app.post("/v1/chat/completions", async (c) => {
+    // Parse request
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      c.status(400);
+      return c.json({
+        error: {
+          message: "Malformed JSON request body",
+          type: "invalid_request_error",
+          param: null,
+          code: "invalid_json",
+        },
+      });
+    }
+    const parsed = ChatCompletionRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      c.status(400);
+      return c.json({
+        error: {
+          message: `Invalid request: ${parsed.error.message}`,
+          type: "invalid_request_error",
+          param: null,
+          code: "invalid_request",
+        },
+      });
+    }
+    const req = parsed.data;
+
+    const allowUnauthenticated = !!(upstreamRouter && !upstreamRouter.isCodexModel(req.model));
+
     // Auth check
-    if (!accountPool.isAuthenticated()) {
+    if (!allowUnauthenticated && !accountPool.isAuthenticated()) {
       c.status(401);
       return c.json({
         error: {
@@ -95,35 +126,6 @@ export function createChatRoutes(
         });
       }
     }
-
-    // Parse request
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      c.status(400);
-      return c.json({
-        error: {
-          message: "Malformed JSON request body",
-          type: "invalid_request_error",
-          param: null,
-          code: "invalid_json",
-        },
-      });
-    }
-    const parsed = ChatCompletionRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      c.status(400);
-      return c.json({
-        error: {
-          message: `Invalid request: ${parsed.error.message}`,
-          type: "invalid_request_error",
-          param: null,
-          code: "invalid_request",
-        },
-      });
-    }
-    const req = parsed.data;
 
     const { codexRequest, tupleSchema } = translateToCodexRequest(req);
     const displayModel = buildDisplayModelName(parseModelName(req.model));

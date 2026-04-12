@@ -107,8 +107,27 @@ export function createGeminiRoutes(
       action === "streamGenerateContent" ||
       c.req.query("alt") === "sse";
 
+    // Parse request
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      c.status(400);
+      return c.json(makeError(400, "Invalid JSON in request body"));
+    }
+    const validationResult = GeminiGenerateContentRequestSchema.safeParse(body);
+    if (!validationResult.success) {
+      c.status(400);
+      return c.json(
+        makeError(400, `Invalid request: ${validationResult.error.message}`),
+      );
+    }
+    const req = validationResult.data;
+
+    const allowUnauthenticated = !!(upstreamRouter && !upstreamRouter.isCodexModel(geminiModel));
+
     // Auth check
-    if (!accountPool.isAuthenticated()) {
+    if (!allowUnauthenticated && !accountPool.isAuthenticated()) {
       c.status(401);
       return c.json(
         makeError(401, "Not authenticated. Please login first at /"),
@@ -129,23 +148,6 @@ export function createGeminiRoutes(
         return c.json(makeError(401, "Invalid API key"));
       }
     }
-
-    // Parse request
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      c.status(400);
-      return c.json(makeError(400, "Invalid JSON in request body"));
-    }
-    const validationResult = GeminiGenerateContentRequestSchema.safeParse(body);
-    if (!validationResult.success) {
-      c.status(400);
-      return c.json(
-        makeError(400, `Invalid request: ${validationResult.error.message}`),
-      );
-    }
-    const req = validationResult.data;
 
     const { codexRequest, tupleSchema } = translateGeminiToCodexRequest(
       req,
