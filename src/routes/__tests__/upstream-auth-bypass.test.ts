@@ -83,6 +83,7 @@ describe("upstream direct routing without Codex auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConfig.server.proxy_api_key = null;
+    mockHandleDirectRequest.mockImplementation(async (c) => c.json({ ok: true }));
     loadStaticModels();
   });
 
@@ -169,6 +170,46 @@ describe("upstream direct routing without Codex auth", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(mockHandleDirectRequest).toHaveBeenCalledTimes(1);
+    pool.destroy();
+  });
+
+  it("still requires proxy api key for OpenAI direct upstream requests", async () => {
+    mockConfig.server.proxy_api_key = "proxy-secret";
+    const pool = new AccountPool();
+    const app = createChatRoutes(pool, undefined, undefined, {
+      isCodexModel: vi.fn(() => false),
+      resolve: vi.fn(() => ({ tag: "custom-upstream" })),
+    } as never);
+
+    const rejected = await app.request("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer wrong-key",
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [{ role: "user", content: "hello" }],
+      }),
+    });
+
+    expect(rejected.status).toBe(401);
+    expect(mockHandleDirectRequest).toHaveBeenCalledTimes(0);
+
+    const accepted = await app.request("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer proxy-secret",
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [{ role: "user", content: "hello" }],
+      }),
+    });
+
+    expect(accepted.status).toBe(200);
     expect(mockHandleDirectRequest).toHaveBeenCalledTimes(1);
     pool.destroy();
   });

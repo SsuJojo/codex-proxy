@@ -22,6 +22,23 @@ export class UpstreamRouter {
   /** Cache: apiKeyEntry.id → adapter instance. Invalidated when key changes. */
   private dynamicAdapters = new Map<string, { apiKey: string; adapter: UpstreamAdapter }>();
 
+  private splitExplicitProvider(model: string): { tag: string; bareModel: string } | null {
+    const colonIdx = model.indexOf(":");
+    if (colonIdx <= 0) return null;
+    const tag = model.slice(0, colonIdx);
+    if (!this.adapters.has(tag)) return null;
+    return { tag, bareModel: model.slice(colonIdx + 1) };
+  }
+
+  private resolvePoolModelCandidates(model: string): string[] {
+    const explicitProvider = this.splitExplicitProvider(model);
+    return explicitProvider ? [model, explicitProvider.bareModel] : [model];
+  }
+
+  private getDefaultAdapter(): UpstreamAdapter | undefined {
+    return this.adapters.get(this.defaultTag) ?? this.adapters.values().next().value;
+  }
+
   constructor(
     private readonly adapters: Map<string, UpstreamAdapter>,
     private readonly modelRouting: Record<string, string>,
@@ -35,27 +52,24 @@ export class UpstreamRouter {
   }
 
   resolve(model: string): UpstreamAdapter {
-    const defaultAdapter = this.adapters.get(this.defaultTag) ?? this.adapters.values().next().value!;
+    const defaultAdapter = this.getDefaultAdapter();
+    const explicitProvider = this.splitExplicitProvider(model);
 
-    // Strip provider prefix for pool lookup
-    const colonIdx = model.indexOf(":");
-    const bareModel = colonIdx > 0 ? model.slice(colonIdx + 1) : model;
-
-    // 0. ApiKeyPool — exact model match (highest priority)
+    // 0. ApiKeyPool — exact model match first, then explicit provider-stripped fallback
     if (this.apiKeyPool && this.adapterFactory) {
-      const entries = this.apiKeyPool.getByModel(bareModel);
-      if (entries.length > 0) {
-        // Round-robin via least-recently-used
-        const entry = pickLeastRecentlyUsed(entries);
-        this.apiKeyPool.markUsed(entry.id);
-        return this.getOrCreateDynamicAdapter(entry);
+      for (const candidate of this.resolvePoolModelCandidates(model)) {
+        const entries = this.apiKeyPool.getByModel(candidate);
+        if (entries.length > 0) {
+          const entry = pickLeastRecentlyUsed(entries);
+          this.apiKeyPool.markUsed(entry.id);
+          return this.getOrCreateDynamicAdapter(entry);
+        }
       }
     }
 
     // 1. Explicit provider prefix "provider:model-name"
-    if (colonIdx > 0) {
-      const tag = model.slice(0, colonIdx);
-      const adapter = this.adapters.get(tag);
+    if (explicitProvider) {
+      const adapter = this.adapters.get(explicitProvider.tag);
       if (adapter) return adapter;
     }
 
@@ -75,11 +89,13 @@ export class UpstreamRouter {
     }
 
     // 4. Default adapter
-    return defaultAdapter;
+    if (defaultAdapter) return defaultAdapter;
+
+    throw new Error(`No upstream adapter available for model \"${model}\"`);
   }
 
   isCodexModel(model: string): boolean {
-    return this.resolve(model).tag === "codex";
+    return this.getDefaultAdapter()?.tag === "codex" && this.resolve(model).tag === "codex";
   }
 
   private getOrCreateDynamicAdapter(entry: ApiKeyEntry): UpstreamAdapter {

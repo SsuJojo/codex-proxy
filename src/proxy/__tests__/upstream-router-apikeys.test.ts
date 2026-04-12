@@ -145,4 +145,18 @@ describe("UpstreamRouter with ApiKeyPool", () => {
     const adapter = router.resolve("openai:gpt-5.4");
     expect(adapter.tag).toBe("dynamic-openai-gpt-5.4");
   });
+
+  it("prefers exact api-key model match for models containing colon", () => {
+    pool.add({ provider: "openai", model: "google/gemma-4-26b-a4b-it:free", apiKey: "k1" });
+
+    const adapters = new Map<string, UpstreamAdapter>();
+    adapters.set("openai", mockAdapter("openai"));
+
+    const router = new UpstreamRouter(adapters, {}, "codex");
+    router.setApiKeyPool(pool, mockFactory);
+
+    const adapter = router.resolve("google/gemma-4-26b-a4b-it:free");
+    expect(adapter.tag).toBe("dynamic-openai-google/gemma-4-26b-a4b-it:free");
+    expect(router.isCodexModel("google/gemma-4-26b-a4b-it:free")).toBe(false);
+  });
 });
