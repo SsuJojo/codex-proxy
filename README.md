@@ -227,43 +227,43 @@ curl http://localhost:8080/v1/chat/completions \
 <summary><h2>🏗️ 技术架构</h2></summary>
 
 ```
-                                Codex Proxy
-┌──────────────────────────────────────────────────────────┐
-│                                                          │
-│  Client (Cursor / Claude Code / Continue / SDK / ...)    │
-│       │                                                  │
-│  POST /v1/chat/completions (OpenAI)                      │
-│  POST /v1/messages         (Anthropic)                   │
-│  POST /v1/responses        (Codex 直通)                  │
-│  POST /gemini/*            (Gemini)                      │
-│       │                                                  │
-│       ▼                                                  │
-│  ┌──────────┐    ┌───────────────┐    ┌──────────────┐   │
-│  │  Routes   │──▶│  Translation  │──▶│    Proxy     │   │
-│  │  (Hono)  │   │ Multi→Codex   │   │ Native TLS   │   │
-│  └──────────┘   └───────────────┘   └──────┬───────┘   │
-│       ▲                                     │           │
-│       │          ┌───────────────┐          │           │
-│       └──────────│  Translation  │◀─────────┘           │
-│                  │ Codex→Multi   │  SSE stream          │
-│                  └───────────────┘                       │
-│                                                          │
-│  ┌──────────┐  ┌───────────────┐  ┌──────────────────┐  │
-│  │   Auth   │  │  Fingerprint  │  │   Model Store    │  │
-│  │OAuth/API │  │ Rust (rustls) │  │ Static + Dynamic │  │
-│  │ API Keys │  │  Headers/UA   │  │  Plan Routing    │  │
-│  └──────────┘  └───────────────┘  └──────────────────┘  │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-                          │
-                Rust Native Addon (napi-rs)
-              reqwest 0.12.28 + rustls 0.23.36
-             (TLS 指纹 = 真实 Codex Desktop)
-                          │
-                   ┌──────┴──────┐
-                   ▼             ▼
-             chatgpt.com   第三方 Provider
-         /backend-api/codex  (第三方 API)
+                          Codex Proxy
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│  Client (Cursor / Claude Code / Continue / SDK / ...)        │
+│       │                                                      │
+│  POST /v1/chat/completions  (OpenAI)                         │
+│  POST /v1/messages          (Anthropic)                      │
+│  POST /v1/responses         (Codex passthrough)              │
+│  POST /gemini/*             (Gemini)                         │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌──────────┐    ┌───────────────┐    ┌──────────────┐       │
+│  │  Routes  │───▶│  Translation  │───▶│    Proxy     │       │
+│  │  (Hono)  │    │ Multi -> Codex│    │  Native TLS  │       │
+│  └──────────┘    └───────────────┘    └──────┬───────┘       │
+│       ▲                                       │              │
+│       │          ┌───────────────┐            │              │
+│       └──────────│  Translation  │◀───────────┘              │
+│                  │ Codex -> Multi│    SSE stream             │
+│                  └───────────────┘                           │
+│                                                              │
+│  ┌──────────┐  ┌───────────────┐  ┌──────────────────┐       │
+│  │   Auth   │  │  Fingerprint  │  │   Model Store    │       │
+│  │OAuth/API │  │ Rust (rustls) │  │ Static + Dynamic │       │
+│  │ API Keys │  │  Headers/UA   │  │   Plan Routing   │       │
+│  └──────────┘  └───────────────┘  └──────────────────┘       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                   Rust Native Addon (napi-rs)
+                 reqwest 0.12.28 + rustls 0.23.36
+              (TLS fingerprint = Codex Desktop)
+                             │
+                     ┌───────┴───────┐
+                     ▼               ▼
+               chatgpt.com    Third-party Provider
+           /backend-api/codex     (upstream API)
 ```
 
 </details>
