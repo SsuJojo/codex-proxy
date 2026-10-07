@@ -94,10 +94,10 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
       }
       return c.json(fmt.formatError(code, err.message));
     }
+    c.status(502);
     if (canReturnStreamError(req, fmt)) {
       return streamErrorResponse(c, fmt, 502, msg);
     }
-    c.status(502);
     return c.json(fmt.formatError(502, msg));
   }
 

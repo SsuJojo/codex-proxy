@@ -1,3 +1,4 @@
+import { findPosixShell } from "../../_helpers/posix-shell.js";
 import { execFileSync } from "child_process";
 import { chmodSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -40,7 +41,9 @@ function runWithWorkflowRunPages(pages: unknown[]): string {
   }).trim();
 }
 
-describe("promote CI gate", () => {
+const describeIfBash = findPosixShell("bash") ? describe : describe.skip;
+
+describeIfBash("promote CI gate", () => {
   it("ignores an old failed release run when the quality gate succeeded", () => {
     expect(runWithWorkflowRuns([
       {

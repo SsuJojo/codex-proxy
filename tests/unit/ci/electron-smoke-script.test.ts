@@ -1,3 +1,4 @@
+import { findPosixShell } from "../../_helpers/posix-shell.js";
 /**
  * Tests for the cross-platform smoke script used by the release
  * pipeline (`.github/scripts/electron-smoke.sh`).
@@ -27,16 +28,8 @@ interface RunResult {
   stderr: string;
 }
 
-function hasBash(): boolean {
-  try {
-    execFileSync("bash", ["-c", "exit 0"], { stdio: "ignore", timeout: 1000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
-const bashAvailable = hasBash();
+const bashAvailable = findPosixShell("bash") !== null;
 const describeIfBash = bashAvailable ? describe : describe.skip;
 
 function run(env: Record<string, string>, timeoutMs = 10_000): RunResult {

@@ -1,3 +1,4 @@
+import { findPosixShell } from "../../_helpers/posix-shell.js";
 /**
  * Tests for the CODEX_ARCH auto-detection logic in docker-entrypoint.sh.
  *
@@ -8,7 +9,7 @@
 
 import { describe, it, expect, afterAll } from "vitest";
 import { execFileSync } from "child_process";
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -29,20 +30,8 @@ fi
 echo "$CODEX_ARCH"
 `;
 
-function findShell(): string | null {
-  for (const candidate of ["/bin/sh", "/usr/bin/sh", "sh"]) {
-    if (candidate.includes("/") && !existsSync(candidate)) continue;
-    try {
-      execFileSync(candidate, ["-c", "exit 0"], { stdio: "ignore", timeout: 1000 });
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-  return null;
-}
 
-const shell = findShell();
+const shell = findPosixShell("sh");
 const describeIfShell = shell ? describe : describe.skip;
 
 function runArch(env: Record<string, string>): string {

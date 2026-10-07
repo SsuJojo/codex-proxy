@@ -230,6 +230,61 @@ describe("handleDirectRequest error forwarding", () => {
     expect(res.headers.get("retry-after")).toBe("60");
   });
 
+  it.each([401, 404, 500])("preserves streaming HTTP %i and SSE error content", async (status) => {
+    mockUpstreamCreate = () => Promise.reject(new CodexApiError(status, "upstream rejected"));
+    const app = new Hono();
+    const fmt = createMockFormatAdapter();
+    const req = { ...createDefaultRequest(), isStreaming: true };
+    app.post("/test", (c) => handleDirectRequest({ c, upstream: createMockUpstream() as never, req, fmt }));
+    const res = await app.request("/test", { method: "POST" });
+    expect(res.status).toBe(status);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(await res.text()).toContain("upstream rejected");
+    expect(fmt.formatStreamError).toHaveBeenCalledWith(status, expect.stringContaining("upstream rejected"));
+  });
+
+  it("returns streaming 502 for network exceptions", async () => {
+    mockUpstreamCreate = () => Promise.reject(new TypeError("network failure"));
+    const app = new Hono();
+    const fmt = createMockFormatAdapter();
+    const req = { ...createDefaultRequest(), isStreaming: true };
+    app.post("/test", (c) => handleDirectRequest({ c, upstream: createMockUpstream() as never, req, fmt }));
+    const res = await app.request("/test", { method: "POST" });
+    expect(res.status).toBe(502);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(await res.text()).toContain("network failure");
+    expect(fmt.formatStreamError).toHaveBeenCalledWith(502, "network failure");
+  });
+
+  it.each([
+    [false, 429, "60", true],
+    [false, 429, "Wed, 21 Oct 2026 07:28:00 GMT", false],
+    [true, 429, "Wed, 21 Oct 2026 07:28:00 GMT", false],
+    [true, 429, undefined, true],
+    [false, 429, undefined, false],
+    [true, 500, "60", false],
+    [false, 500, "60", true],
+  ] as const)("handles Retry-After (stream=%s status=%i header=%s JSON=%s)", async (isStreaming, status, retryAfter, json) => {
+    const body = json ? JSON.stringify({ error: { message: "upstream rejected" } }) : "upstream rejected";
+    mockUpstreamCreate = () => Promise.reject(new CodexApiError(
+      status, body, retryAfter ? new Headers({ "rEtRy-AfTeR": retryAfter }) : undefined,
+    ));
+    const app = new Hono();
+    const fmt = createMockFormatAdapter();
+    const req = { ...createDefaultRequest(), isStreaming };
+    app.post("/test", (c) => handleDirectRequest({ c, upstream: createMockUpstream() as never, req, fmt }));
+    const res = await app.request("/test", { method: "POST" });
+    expect(res.status).toBe(status);
+    expect(res.headers.get("retry-after")).toBe(status === 429 ? retryAfter ?? null : null);
+    if (isStreaming) {
+      expect(await res.text()).toContain("event: response.failed");
+    } else if (json) {
+      expect(await res.json()).toEqual(JSON.parse(body));
+    } else {
+      expect(await res.json()).toMatchObject({ error: status === 429 ? "rate_limited" : "api_error" });
+    }
+  });
+
   it("falls back to format429 for non-JSON 429", async () => {
     mockUpstreamCreate = () =>
       Promise.reject(new CodexApiError(429, "Too Many Requests"));

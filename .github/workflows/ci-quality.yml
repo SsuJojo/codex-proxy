@@ -95,3 +95,23 @@ jobs:
 
       - name: Run web frontend tests
         run: cd web && npx vitest run
+
+  windows-compatibility:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Unix shell fixtures intentionally skip under native Windows Node;
+      # PowerShell behavior and Node-only path/update tests run here instead.
+      - name: Verify Windows scripts and upstream error forwarding
+        run: npx vitest run tests/unit/ci tests/unit/update-scripts-path.test.ts tests/unit/update-scripts-originator.test.ts tests/unit/routes/shared/error-forwarding.test.ts tests/unit/proxy/antigravity-upstream.test.ts tests/unit/routes/upstream-auth-bypass.test.ts
+      - name: Type-check source and public update scripts
+        run: |
+          npx tsc --noEmit
+          npm run typecheck:scripts

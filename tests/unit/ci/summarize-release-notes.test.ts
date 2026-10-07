@@ -219,15 +219,15 @@ describe("summarize-release-notes.mjs CLI", () => {
   });
 
   it("exits zero with fallback when the LLM endpoint is unreachable (real fetch path)", () => {
-    // .invalid TLD resolves nowhere (RFC 2606) → fast DNS failure, both
-    // retries fail, grouped fallback, exit 0. Pins the never-blocks-release
+    // Loopback port 0 cannot be a listening endpoint. Avoid DNS/proxy
+    // latency while exercising real fetch failure and both retries. Pins the never-blocks-release
     // invariant through the exact subprocess mode release.yml uses.
     const out = execFileSync("node", [SCRIPT, "v9.9.9"], {
       encoding: "utf-8",
       input: COMMITS,
       env: {
         ...process.env,
-        RELEASE_NOTES_BASE_URL: "http://release-notes-test.invalid/v1",
+        RELEASE_NOTES_BASE_URL: "http://127.0.0.1:0/v1",
         RELEASE_NOTES_API_KEY: "k",
         RELEASE_NOTES_MODEL: "m",
         RELEASE_NOTES_REQUEST_TIMEOUT_MS: "100",

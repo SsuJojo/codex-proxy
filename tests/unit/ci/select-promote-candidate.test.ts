@@ -1,3 +1,4 @@
+import { findPosixShell } from "../../_helpers/posix-shell.js";
 import { execFileSync } from "child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -20,16 +21,8 @@ function git(cwd: string, args: string[], env: Record<string, string> = {}): str
   });
 }
 
-function hasBash(): boolean {
-  try {
-    execFileSync("bash", ["-c", "exit 0"], { stdio: "ignore", timeout: 1000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
-const describeIfBash = hasBash() ? describe : describe.skip;
+const describeIfBash = findPosixShell("bash") ? describe : describe.skip;
 
 function commitAt(cwd: string, message: string, epoch: number, file = "file.txt"): string {
   writeFileSync(join(cwd, file), `${message}\n${epoch}\n`);
